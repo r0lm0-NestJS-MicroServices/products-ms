@@ -45,7 +45,7 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
   async findOne(id: number) {
     const numericId = Number(id);
     if (isNaN(numericId)) {
-      throw new BadRequestException('ID must be a number');
+      throw new RpcException('ID must be a number' + id);
     }
     const product = await this.product.findUnique({
       where: {
@@ -79,7 +79,7 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
   async remove(id: number) {
     const numericId = Number(id);
     if (isNaN(numericId)) {
-      throw new BadRequestException('ID must be a number');
+      throw new RpcException('ID must be a number' + id);
     }
 
     await this.findOne(numericId); // Verificar que existe
