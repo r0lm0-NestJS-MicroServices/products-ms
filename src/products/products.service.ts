@@ -94,4 +94,56 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     //   where: { id: numericId }
     // });
   }
+
+
+  async validateProducts(ids: number[] | { ids: number[] }) {
+    // Manejar tanto array directo como objeto con propiedad ids
+    let idsArray: number[];
+
+    if (Array.isArray(ids)) {
+      idsArray = ids;
+    } else if (ids && typeof ids === 'object' && 'ids' in ids) {
+      idsArray = ids.ids;
+    } else {
+      throw new RpcException({
+        message: 'IDs must be an array or an object with ids property',
+        status: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    // Validar que idsArray sea un array y no esté vacío
+    console.log('IDs recibidos:', idsArray);
+    if (!Array.isArray(idsArray) || idsArray.length === 0) {
+      throw new RpcException({
+        message: 'IDs must be a non-empty array',
+        status: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    // Validar que todos los IDs sean números válidos
+    const invalidIds = idsArray.filter(id => isNaN(Number(id)) || Number(id) <= 0);
+    if (invalidIds.length > 0) {
+      throw new RpcException({
+        message: 'All IDs must be valid positive numbers',
+        status: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    const products = await this.product.findMany({
+      where: {
+        id: { in: idsArray },
+        available: true // Solo productos disponibles
+      }
+    });
+
+    if (products.length !== idsArray.length) {
+      throw new RpcException({
+        message: 'Some products are not available',
+        status: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    return products;
+  }
 }
+
