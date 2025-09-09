@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PrismaClient } from '@prisma/client';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
+import { RpcException } from '@nestjs/microservices';
 
 @Injectable()
 export class ProductsService extends PrismaClient implements OnModuleInit {
@@ -44,7 +45,7 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
   async findOne(id: number) {
     const numericId = Number(id);
     if (isNaN(numericId)) {
-      throw new BadRequestException('ID must be a number');
+      throw new RpcException('ID must be a number' + id);
     }
     const product = await this.product.findUnique({
       where: {
@@ -53,7 +54,7 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
       }
     });
     if (!product) {
-      throw new NotFoundException('Product not found');
+      throw new RpcException({ message: 'Product not found # ' + id, status: HttpStatus.NOT_FOUND });
     }
     return product;
   }
@@ -70,7 +71,7 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
         data: data
       });
     } catch (error) {
-      throw new NotFoundException('Product not found');
+      throw new RpcException('Product not found # ' + id);
     }
 
   }
@@ -78,7 +79,7 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
   async remove(id: number) {
     const numericId = Number(id);
     if (isNaN(numericId)) {
-      throw new BadRequestException('ID must be a number');
+      throw new RpcException('ID must be a number' + id);
     }
 
     await this.findOne(numericId); // Verificar que existe
@@ -93,4 +94,56 @@ export class ProductsService extends PrismaClient implements OnModuleInit {
     //   where: { id: numericId }
     // });
   }
+
+
+  async validateProducts(ids: number[] | { ids: number[] }) {
+    // Manejar tanto array directo como objeto con propiedad ids
+    let idsArray: number[];
+
+    if (Array.isArray(ids)) {
+      idsArray = ids;
+    } else if (ids && typeof ids === 'object' && 'ids' in ids) {
+      idsArray = ids.ids;
+    } else {
+      throw new RpcException({
+        message: 'IDs must be an array or an object with ids property',
+        status: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    // Validar que idsArray sea un array y no esté vacío
+    console.log('IDs recibidos:', idsArray);
+    if (!Array.isArray(idsArray) || idsArray.length === 0) {
+      throw new RpcException({
+        message: 'IDs must be a non-empty array',
+        status: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    // Validar que todos los IDs sean números válidos
+    const invalidIds = idsArray.filter(id => isNaN(Number(id)) || Number(id) <= 0);
+    if (invalidIds.length > 0) {
+      throw new RpcException({
+        message: 'All IDs must be valid positive numbers',
+        status: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    const products = await this.product.findMany({
+      where: {
+        id: { in: idsArray },
+        available: true // Solo productos disponibles
+      }
+    });
+
+    if (products.length !== idsArray.length) {
+      throw new RpcException({
+        message: 'Some products are not available',
+        status: HttpStatus.BAD_REQUEST
+      });
+    }
+
+    return products;
+  }
 }
+
